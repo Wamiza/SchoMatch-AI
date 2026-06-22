@@ -25,13 +25,20 @@ async def discover_opportunities(
     Rate limited to prevent API abuse.
     """
     try:
+        # Save profile to database first to satisfy foreign key constraints
+        from app.db.models import StudentProfile
+        import uuid
+        profile_record = StudentProfile(id=str(uuid.uuid4()), **profile.model_dump())
+        db.add(profile_record)
+        await db.flush()
+        
         # Run the agent pipeline
         result = await run_discovery_pipeline(profile)
         
         # Save session to database (async)
-        # Note: In a full implementation, we'd also save the profile first and link them
         session_record = SearchSession(
             id=result.session_id,
+            profile_id=profile_record.id,
             results=[opp.model_dump() for opp in result.opportunities],
             agent_trace=result.agent_trace,
             total_matches=result.total_matches
