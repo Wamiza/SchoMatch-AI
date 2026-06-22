@@ -1,0 +1,56 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - schomatch
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - schomatch
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: schomatch
+      POSTGRES_USER: schomatch
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-schomatch_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schomatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - schomatch
+
+volumes:
+  pgdata:
+
+networks:
+  schomatch:
+    driver: bridge
