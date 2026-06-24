@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.git/
+.gitignore
+.env
+.env.*
+*.db
+*.sqlite3
+schomatch.db
+.pytest_cache/
+htmlcov/
+.coverage

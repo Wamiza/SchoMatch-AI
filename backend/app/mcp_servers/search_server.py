@@ -25,18 +25,51 @@ async def search_opportunities(
         opportunity_type: Type (scholarship, internship, research, etc)
         degree_level: Required degree level (bachelor, master, phd)
     """
-    # In a real implementation, this would connect to the DB or external APIs
-    # For now, we return a structured JSON string of mock results
-    results = [
-        {
-            "name": f"Example {opportunity_type.capitalize() or 'Opportunity'} in {country or 'Global'}",
-            "organization": "Example Organization",
-            "country": country or "Global",
-            "description": f"An excellent {degree_level or 'academic'} opportunity matching '{query}'.",
-            "match_confidence": "High"
-        }
-    ]
-    return json.dumps({"status": "success", "results": results})
+    from app.db.seed import SEED_OPPORTUNITIES
+
+    matches = []
+    for opp in SEED_OPPORTUNITIES:
+        # Filter by degree level
+        if degree_level and degree_level not in opp.get("degree_levels", []):
+            continue
+
+        # Filter by opportunity type
+        if opportunity_type and opp.get("opportunity_type") != opportunity_type:
+            continue
+
+        # Filter by country (partial match)
+        if country and country.lower() not in opp.get("country", "").lower():
+            continue
+
+        # Filter by query (search name, description, tags)
+        if query:
+            searchable = " ".join([
+                opp.get("name", ""),
+                opp.get("description", ""),
+                opp.get("organization", ""),
+                " ".join(opp.get("tags", [])),
+                " ".join(opp.get("fields_of_study", [])),
+            ]).lower()
+            if query.lower() not in searchable:
+                continue
+
+        matches.append({
+            "name": opp["name"],
+            "organization": opp["organization"],
+            "country": opp["country"],
+            "deadline": opp.get("deadline", "Rolling"),
+            "funding_status": opp["funding_status"],
+            "application_link": opp["application_link"],
+            "opportunity_type": opp["opportunity_type"],
+            "description": opp.get("description", ""),
+            "eligibility_summary": opp.get("eligibility_summary", ""),
+            "degree_levels": opp.get("degree_levels", []),
+            "fields_of_study": opp.get("fields_of_study", []),
+            "min_gpa": opp.get("min_gpa"),
+            "tags": opp.get("tags", []),
+        })
+
+    return json.dumps({"status": "success", "total_found": len(matches), "results": matches})
 
 @mcp.tool()
 async def search_universities(name: str, country: str = "") -> str:

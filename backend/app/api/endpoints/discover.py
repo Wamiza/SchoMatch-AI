@@ -5,16 +5,18 @@ Discovery endpoints for running the agent pipeline.
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas.opportunity import DiscoveryResponse
+from app.api.schemas.opportunity import DiscoveryResponse, OpportunityResult
 from app.api.schemas.profile import StudentProfileCreate
 from app.db.database import get_db
 from app.db.models import SearchSession
+from app.middleware.rate_limiter import limiter
 from app.services.agent_runner import run_discovery_pipeline
 
 router = APIRouter()
 
 
 @router.post("", response_model=DiscoveryResponse)
+@limiter.limit("10/minute")
 async def discover_opportunities(
     request: Request,
     profile: StudentProfileCreate,
@@ -71,7 +73,7 @@ async def get_discovery_session(
     return DiscoveryResponse(
         session_id=session.id,
         profile_summary={},
-        opportunities=session.results,
+        opportunities=[OpportunityResult(**o) for o in session.results],
         total_matches=session.total_matches,
         agent_trace=session.agent_trace,
         career_advice="",

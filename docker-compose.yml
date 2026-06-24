@@ -6,6 +6,8 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://schomatch:${DB_PASSWORD:-schomatch_secret}@postgres:5432/schomatch
     depends_on:
       postgres:
         condition: service_healthy

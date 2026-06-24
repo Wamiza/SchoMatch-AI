@@ -5,7 +5,7 @@ ORM models for SchoMatch-AI database.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, JSON, ForeignKey, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,6 +17,10 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 
@@ -25,13 +29,14 @@ class StudentProfile(Base):
     department: Mapped[str] = mapped_column(String(255))
     semester: Mapped[int] = mapped_column(Integer)
     gpa: Mapped[float] = mapped_column(Float)
+    gpa_scale: Mapped[float] = mapped_column(Float, default=4.0)
     degree_level: Mapped[str] = mapped_column(String(50))
     skills: Mapped[dict] = mapped_column(JSON, default=list)
     interests: Mapped[dict] = mapped_column(JSON, default=list)
     preferred_countries: Mapped[dict] = mapped_column(JSON, default=list)
     opportunity_types: Mapped[dict] = mapped_column(JSON, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     sessions: Mapped[list["SearchSession"]] = relationship(back_populates="profile", cascade="all, delete-orphan")
@@ -57,7 +62,7 @@ class Opportunity(Base):
     fields_of_study: Mapped[dict] = mapped_column(JSON, default=list)
     min_gpa: Mapped[float] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class SearchSession(Base):
@@ -68,7 +73,7 @@ class SearchSession(Base):
     results: Mapped[dict] = mapped_column(JSON, default=list)
     agent_trace: Mapped[dict] = mapped_column(JSON, default=dict)
     total_matches: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     profile: Mapped["StudentProfile"] = relationship(back_populates="sessions")
 
@@ -82,7 +87,7 @@ class SavedOpportunity(Base):
     match_score: Mapped[int] = mapped_column(Integer, default=0)
     action_plan: Mapped[dict] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(50), default="saved")
-    saved_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    saved_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     profile: Mapped["StudentProfile"] = relationship(back_populates="saved_opportunities")
     opportunity: Mapped["Opportunity"] = relationship()
@@ -97,6 +102,6 @@ class DeadlineReminder(Base):
     reminder_date: Mapped[str] = mapped_column(String(20))
     reminder_type: Mapped[str] = mapped_column(String(50))
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     saved_opportunity: Mapped["SavedOpportunity"] = relationship(back_populates="reminders")

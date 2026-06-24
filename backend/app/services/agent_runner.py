@@ -38,6 +38,7 @@ def analyze_student_profile(
     interests: list[str],
     preferred_countries: list[str],
     opportunity_types: list[str],
+    gpa_scale: float = 4.0,
 ) -> dict:
     """Analyze and structure a student's academic profile for opportunity matching.
     
@@ -55,14 +56,17 @@ def analyze_student_profile(
     Returns:
         Structured profile analysis with strengths and eligibility attributes
     """
+    # Normalize GPA to 4.0 scale for uniform evaluation
+    normalized_gpa = min(4.0, (gpa / gpa_scale) * 4.0) if gpa_scale > 0 else 0.0
+
     # Compute academic standing
-    if gpa >= 3.7:
+    if normalized_gpa >= 3.7:
         academic_standing = "excellent"
-    elif gpa >= 3.3:
+    elif normalized_gpa >= 3.3:
         academic_standing = "very good"
-    elif gpa >= 3.0:
+    elif normalized_gpa >= 3.0:
         academic_standing = "good"
-    elif gpa >= 2.5:
+    elif normalized_gpa >= 2.5:
         academic_standing = "average"
     else:
         academic_standing = "below average"
@@ -77,6 +81,8 @@ def analyze_student_profile(
             "semester": semester,
             "year_of_study": year_of_study,
             "gpa": gpa,
+            "gpa_scale": gpa_scale,
+            "normalized_gpa": normalized_gpa,
             "academic_standing": academic_standing,
             "degree_level": degree_level,
             "skills": skills,
@@ -494,7 +500,7 @@ calculate match scores, provide career advice, and register deadlines."""
                         })
 
         # Parse results from the pipeline
-        opportunities = _extract_opportunities_from_session(profile, session_service, session.id)
+        opportunities = await _extract_opportunities_from_session(profile, session_service, session.id)
         career_advice_text = _extract_career_advice(final_text_parts)
 
         elapsed = time.time() - start_time
@@ -545,6 +551,7 @@ async def _fallback_pipeline(
         interests=profile.interests,
         preferred_countries=profile.preferred_countries,
         opportunity_types=profile.opportunity_types,
+        gpa_scale=profile.gpa_scale,
     )
 
     # Step 2: Search
@@ -625,11 +632,72 @@ async def _fallback_pipeline(
     )
 
 
-def _extract_opportunities_from_session(
+async def _extract_opportunities_from_session(
     profile: StudentProfileCreate, session_service, session_id: str
 ) -> list[OpportunityResult]:
-    """Extract structured opportunities from agent session state."""
-    # Direct tool execution as extraction fallback
+    """Extract structured opportunities from agent session state.
+    
+    Attempts to read output_key values stored by ADK agents first.
+    Falls back to direct tool execution only if session state is empty.
+    """
+    try:
+        # Try reading from ADK session state (agents store via output_key)
+        session = await session_service.get_session(
+            app_name="schomatch_ai",
+            user_id="student_user",
+            session_id=session_id,
+        )
+
+        state = getattr(session, "state", {}) or {}
+        ranked_results = state.get("ranked_results")
+        career_advice_state = state.get("career_advice")
+
+        if ranked_results:
+            # Parse ranked results — may be a JSON string or dict
+            if isinstance(ranked_results, str):
+                try:
+                    ranked_results = json.loads(ranked_results)
+                except json.JSONDecodeError:
+                    ranked_results = None
+
+        if ranked_results and isinstance(ranked_results, dict):
+            scored = ranked_results.get("scored_opportunities", [])
+            if scored:
+                # Parse career advice for action plan
+                action_plan = []
+                if career_advice_state:
+                    if isinstance(career_advice_state, str):
+                        try:
+                            career_advice_state = json.loads(career_advice_state)
+                        except json.JSONDecodeError:
+                            career_advice_state = {}
+                    if isinstance(career_advice_state, dict):
+                        action_plan = career_advice_state.get("action_plan", [])
+
+                logger.info(f"Read {len(scored)} opportunities from ADK session state")
+                return [
+                    OpportunityResult(
+                        name=opp["name"],
+                        organization=opp["organization"],
+                        country=opp["country"],
+                        deadline=opp.get("deadline", "Rolling"),
+                        funding_status=opp["funding_status"],
+                        application_link=opp["application_link"],
+                        match_score=opp["match_score"],
+                        eligibility_summary=opp.get("eligibility_summary", ""),
+                        recommendation_reason=_generate_recommendation_reason(opp, profile),
+                        missing_requirements=opp.get("missing_requirements", []),
+                        action_plan=action_plan,
+                        opportunity_type=opp.get("opportunity_type", ""),
+                        tags=opp.get("tags", []),
+                    )
+                    for opp in scored
+                ]
+    except Exception as e:
+        logger.warning(f"Could not read ADK session state, falling back to direct tools: {e}")
+
+    # Fallback: re-run tools directly
+    logger.info("Falling back to direct tool execution for opportunity extraction")
     search_result = search_opportunities(
         degree_level=profile.degree_level,
         fields_of_interest=profile.interests,
@@ -691,8 +759,6 @@ def _generate_recommendation_reason(opp: dict, profile: StudentProfileCreate) ->
 def _extract_career_advice(text_parts: list[str]) -> str:
     """Extract career advice from agent text output."""
     combined = " ".join(text_parts)
-    if len(combined) > 500:
-        return combined[:500] + "..."
     return combined if combined else "Focus on applying early to maximize your chances."
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class StudentProfileCreate(BaseModel):
@@ -12,7 +12,8 @@ class StudentProfileCreate(BaseModel):
     university: str = Field(..., min_length=2, max_length=255, description="University name")
     department: str = Field(..., min_length=2, max_length=255, description="Degree program / department")
     semester: int = Field(..., ge=1, le=16, description="Current semester")
-    gpa: float = Field(..., ge=0.0, le=4.0, description="GPA / CGPA on 4.0 scale")
+    gpa: float = Field(..., ge=0.0, description="GPA / CGPA")
+    gpa_scale: float = Field(default=4.0, ge=1.0, le=10.0, description="GPA scale (4.0, 5.0, 10.0, etc.)")
     degree_level: Literal["bachelor", "master", "phd"] = Field(..., description="Current degree level")
     skills: list[str] = Field(default_factory=list, description="Skills list")
     interests: list[str] = Field(default_factory=list, description="Academic and career interests")
@@ -21,6 +22,12 @@ class StudentProfileCreate(BaseModel):
         "scholarship", "internship", "research", "fellowship", "exchange", "summer_school"
     ]] = Field(default_factory=list, description="Types of opportunities sought")
 
+    @model_validator(mode='after')
+    def validate_gpa(self) -> 'StudentProfileCreate':
+        if self.gpa > self.gpa_scale:
+            raise ValueError(f"GPA ({self.gpa}) cannot be greater than the GPA scale ({self.gpa_scale})")
+        return self
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -28,6 +35,7 @@ class StudentProfileCreate(BaseModel):
                 "department": "Computer Science",
                 "semester": 6,
                 "gpa": 3.7,
+                "gpa_scale": 4.0,
                 "degree_level": "bachelor",
                 "skills": ["Python", "Machine Learning", "Data Analysis", "Research"],
                 "interests": ["Artificial Intelligence", "Natural Language Processing"],
@@ -44,6 +52,7 @@ class StudentProfileResponse(BaseModel):
     department: str
     semester: int
     gpa: float
+    gpa_scale: float
     degree_level: str
     skills: list[str]
     interests: list[str]
