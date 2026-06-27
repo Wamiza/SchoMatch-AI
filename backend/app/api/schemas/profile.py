@@ -11,7 +11,7 @@ class StudentProfileCreate(BaseModel):
     """Input schema for creating a student profile."""
     university: str = Field(..., min_length=2, max_length=255, description="University name")
     department: str = Field(..., min_length=2, max_length=255, description="Degree program / department")
-    semester: int = Field(..., ge=1, le=16, description="Current semester")
+    semester: int = Field(..., ge=1, le=8, description="Current semester")
     gpa: float = Field(..., ge=0.0, description="GPA / CGPA")
     gpa_scale: float = Field(default=4.0, ge=1.0, le=10.0, description="GPA scale (4.0, 5.0, 10.0, etc.)")
     degree_level: Literal["bachelor", "master", "phd"] = Field(..., description="Current degree level")

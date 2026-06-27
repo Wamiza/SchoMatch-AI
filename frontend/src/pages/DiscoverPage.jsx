@@ -1,62 +1,154 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import AgentPipeline from '../components/AgentPipeline';
 
+const UNIVERSITIES = [
+  "NUST", "LUMS", "IBA Karachi", "FAST-NUCES", "UET Lahore", "UET Peshawar",
+  "Quaid-i-Azam University", "University of Karachi", "COMSATS University",
+  "Air University", "NED University", "Bahria University", "GIKI", "ITU Lahore",
+  "UMT Lahore", "Superior University", "Punjab University", "Sindh University",
+  "University of Peshawar", "Aga Khan University", "Dow University",
+  "King Edward Medical University", "PIEAS", "NTTF", "Mehran University",
+  "IObm", "Other"
+];
+
+const MAJORS = [
+  "Computer Science", "Software Engineering", "Electrical Engineering",
+  "Mechanical Engineering", "Civil Engineering", "Business Administration",
+  "Economics", "Mathematics", "Physics", "Chemistry", "Biology", "Medicine",
+  "Law", "Social Sciences", "Data Science", "Artificial Intelligence",
+  "Cybersecurity", "Fintech", "Computer Engineering", "Other"
+];
+
 const DiscoverPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    university: 'Stanford University',
-    department: 'Computer Science',
-    semester: 6,
-    gpa: 3.8,
-    degree_level: 'bachelor',
-    skills: 'Python, Machine Learning, Data Analysis, Research',
-    interests: 'Artificial Intelligence, Natural Language Processing',
-    preferred_countries: 'United States, United Kingdom, Germany',
-    opportunity_types: ['scholarship', 'internship', 'research']
+    university: '',
+    department: '',
+    semester: '',
+    gpa: '',
+    degree_level: '',
+    skills: '',
+    interests: '',
+    preferred_countries: '',
+    opportunity_types: [],
+    country_filter: 'preferred'
   });
+  const [otherUniversity, setOtherUniversity] = useState('');
+  const [otherDepartment, setOtherDepartment] = useState('');
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem('discoveryForm');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setFormData(prev => ({
+        ...prev,
+        ...parsed,
+        country_filter: parsed.country_filter || 'preferred'
+      }));
+    }
+    const savedOtherUni = sessionStorage.getItem('discoveryOtherUniversity');
+    if (savedOtherUni) setOtherUniversity(savedOtherUni);
+    const savedOtherDept = sessionStorage.getItem('discoveryOtherDepartment');
+    if (savedOtherDept) setOtherDepartment(savedOtherDept);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      sessionStorage.setItem('discoveryForm', JSON.stringify(updated));
+      return updated;
+    });
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleCheckbox = (type) => {
     setFormData(prev => {
       const types = [...prev.opportunity_types];
-      if (types.includes(type)) {
-        return { ...prev, opportunity_types: types.filter(t => t !== type) };
-      } else {
-        return { ...prev, opportunity_types: [...types, type] };
-      }
+      const updatedTypes = types.includes(type)
+        ? types.filter(t => t !== type)
+        : [...types, type];
+      const updated = { ...prev, opportunity_types: updatedTypes };
+      sessionStorage.setItem('discoveryForm', JSON.stringify(updated));
+      return updated;
     });
+  };
+
+  const handleOtherUniversityChange = (e) => {
+    const val = e.target.value;
+    setOtherUniversity(val);
+    sessionStorage.setItem('discoveryOtherUniversity', val);
+  };
+
+  const handleOtherDepartmentChange = (e) => {
+    const val = e.target.value;
+    setOtherDepartment(val);
+    sessionStorage.setItem('discoveryOtherDepartment', val);
+  };
+
+  const handleReset = () => {
+    sessionStorage.removeItem('discoveryForm');
+    sessionStorage.removeItem('discoveryOtherUniversity');
+    sessionStorage.removeItem('discoveryOtherDepartment');
+    setFormData({
+      university: '',
+      department: '',
+      semester: '',
+      gpa: '',
+      degree_level: '',
+      skills: '',
+      interests: '',
+      preferred_countries: '',
+      opportunity_types: [],
+      country_filter: 'preferred'
+    });
+    setOtherUniversity('');
+    setOtherDepartment('');
+    setErrors({});
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if ((formData.country_filter || 'preferred') !== 'global' && !formData.preferred_countries.trim()) {
+      setErrors(prev => ({ ...prev, preferred_countries: 'Preferred countries is required' }));
+      return;
+    }
+
     setLoading(true);
-    
+
     try {
+      const hasInternshipOrResearch = formData.opportunity_types.includes('internship') || formData.opportunity_types.includes('research');
+
       // Process comma-separated strings into arrays
       const payload = {
         ...formData,
+        university: formData.university === 'Other' ? otherUniversity : formData.university,
+        department: formData.department === 'Other' ? otherDepartment : formData.department,
         semester: parseInt(formData.semester),
         gpa: parseFloat(formData.gpa),
-        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
-        interests: formData.interests.split(',').map(s => s.trim()).filter(Boolean),
-        preferred_countries: formData.preferred_countries.split(',').map(s => s.trim()).filter(Boolean),
+        skills: hasInternshipOrResearch ? formData.skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+        interests: hasInternshipOrResearch ? formData.interests.split(',').map(s => s.trim()).filter(Boolean) : [],
+        preferred_countries: (formData.country_filter || 'preferred') === 'global' ? [] : formData.preferred_countries.split(',').map(s => s.trim()).filter(Boolean),
       };
 
       console.log("Submitting:", payload);
-      
+
       const response = await api.post('/discover', payload);
-      
-      // Store result in sessionStorage for the dashboard
-      sessionStorage.setItem('lastDiscovery', JSON.stringify(response.data));
-      
+
+      // Store result in sessionStorage for the dashboard along with the selected filter scope
+      sessionStorage.setItem('lastDiscovery', JSON.stringify({
+        ...response.data,
+        country_filter: formData.country_filter || 'preferred'
+      }));
+
       navigate('/dashboard');
     } catch (error) {
       console.error('Discovery failed:', error);
@@ -80,28 +172,76 @@ const DiscoverPage = () => {
         <div className="card glass-panel">
           <form onSubmit={handleSubmit}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Academic Profile</h2>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">University</label>
-                <input 
-                  type="text" name="university" className="form-control" 
-                  value={formData.university} onChange={handleChange} required 
-                />
+                <select
+                  name="university"
+                  className="form-control form-select"
+                  value={formData.university}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select University</option>
+                  {UNIVERSITIES.map(uni => (
+                    <option key={uni} value={uni}>{uni}</option>
+                  ))}
+                </select>
+                {formData.university === 'Other' && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Specify University"
+                      className="form-control"
+                      value={otherUniversity}
+                      onChange={handleOtherUniversityChange}
+                      required
+                    />
+                  </div>
+                )}
               </div>
+
               <div className="form-group">
                 <label className="form-label">Department / Major</label>
-                <input 
-                  type="text" name="department" className="form-control" 
-                  value={formData.department} onChange={handleChange} required 
-                />
+                <select
+                  name="department"
+                  className="form-control form-select"
+                  value={formData.department}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select Major</option>
+                  {MAJORS.map(major => (
+                    <option key={major} value={major}>{major}</option>
+                  ))}
+                </select>
+                {formData.department === 'Other' && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Specify Major"
+                      className="form-control"
+                      value={otherDepartment}
+                      onChange={handleOtherDepartmentChange}
+                      required
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">Degree Level</label>
-                <select name="degree_level" className="form-control form-select" value={formData.degree_level} onChange={handleChange}>
+                <select
+                  name="degree_level"
+                  className="form-control form-select"
+                  value={formData.degree_level}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select Degree Level</option>
                   <option value="bachelor">Bachelor's</option>
                   <option value="master">Master's</option>
                   <option value="phd">PhD</option>
@@ -109,51 +249,89 @@ const DiscoverPage = () => {
               </div>
               <div className="form-group">
                 <label className="form-label">Semester</label>
-                <input 
-                  type="number" name="semester" className="form-control" min="1" max="12"
-                  value={formData.semester} onChange={handleChange} required 
+                <input
+                  type="number" name="semester" className="form-control" min="1" max="8"
+                  placeholder="Select Semester"
+                  value={formData.semester} onChange={handleChange} required
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">GPA (4.0 scale)</label>
-                <input 
+                <input
                   type="number" name="gpa" className="form-control" min="0" max="4.0" step="0.01"
-                  value={formData.gpa} onChange={handleChange} required 
+                  placeholder="e.g. 3.5"
+                  value={formData.gpa} onChange={handleChange} required
                 />
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Skills (comma separated)</label>
-              <input 
-                type="text" name="skills" className="form-control" 
-                value={formData.skills} onChange={handleChange} placeholder="Python, Data Analysis, Leadership..." 
-              />
-            </div>
+            {(formData.opportunity_types.includes('internship') || formData.opportunity_types.includes('research')) && (
+              <div className="form-group">
+                <label className="form-label">Skills (comma separated)</label>
+                <input
+                  type="text" name="skills" className="form-control"
+                  value={formData.skills} onChange={handleChange} placeholder="e.g. Python, Data Analysis, Leadership"
+                  required
+                />
+              </div>
+            )}
+
+            {(formData.opportunity_types.includes('internship') || formData.opportunity_types.includes('research')) && (
+              <div className="form-group">
+                <label className="form-label">Interests (comma separated)</label>
+                <input
+                  type="text" name="interests" className="form-control"
+                  value={formData.interests} onChange={handleChange} placeholder="e.g. Artificial Intelligence, Robotics"
+                  required
+                />
+              </div>
+            )}
 
             <div className="form-group">
-              <label className="form-label">Interests (comma separated)</label>
-              <input 
-                type="text" name="interests" className="form-control" 
-                value={formData.interests} onChange={handleChange} placeholder="AI, Renewable Energy, Public Policy..." 
-              />
+              <label className="form-label">Opportunity Scope</label>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                {[
+                  { value: 'preferred', label: 'Preferred Countries Only' },
+                  { value: 'global', label: 'Show All Countries (Global)' }
+                ].map(option => (
+                  <label key={option.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '2rem', border: `1px solid ${(formData.country_filter || 'preferred') === option.value ? 'var(--accent-primary)' : 'transparent'}` }}>
+                    <input
+                      type="radio"
+                      name="country_filter"
+                      value={option.value}
+                      checked={(formData.country_filter || 'preferred') === option.value}
+                      onChange={handleChange}
+                      style={{ accentColor: 'var(--accent-primary)' }}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Preferred Countries (comma separated)</label>
-              <input 
-                type="text" name="preferred_countries" className="form-control" 
-                value={formData.preferred_countries} onChange={handleChange} placeholder="United States, UK, Japan, Global..." 
-              />
-            </div>
+            {(formData.country_filter || 'preferred') !== 'global' && (
+              <div className="form-group">
+                <label className="form-label">Preferred Countries (comma separated)</label>
+                <input
+                  type="text" name="preferred_countries" className="form-control"
+                  value={formData.preferred_countries} onChange={handleChange} placeholder="e.g. Germany, United Kingdom, Japan"
+                  required
+                />
+                {errors.preferred_countries && (
+                  <span style={{ color: 'var(--danger)', fontSize: '0.875rem', marginTop: '0.25rem', display: 'block' }}>
+                    {errors.preferred_countries}
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Opportunity Types</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
                 {['scholarship', 'internship', 'research', 'fellowship', 'exchange', 'summer_school'].map(type => (
                   <label key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '2rem', border: `1px solid ${formData.opportunity_types.includes(type) ? 'var(--accent-primary)' : 'transparent'}` }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={formData.opportunity_types.includes(type)}
                       onChange={() => handleCheckbox(type)}
                       style={{ accentColor: 'var(--accent-primary)' }}
@@ -164,9 +342,9 @@ const DiscoverPage = () => {
               </div>
             </div>
 
-            <button 
-              type="submit" 
-              className="btn btn-primary w-full mt-4" 
+            <button
+              type="submit"
+              className="btn btn-primary w-full mt-4"
               style={{ fontSize: '1.125rem' }}
               disabled={loading || formData.opportunity_types.length === 0}
             >
@@ -175,6 +353,29 @@ const DiscoverPage = () => {
               ) : (
                 <><Search size={20} /> Discover Opportunities</>
               )}
+            </button>
+
+            <button
+              type="button"
+              className="btn w-full mt-2"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+                fontSize: '1rem',
+                transition: 'var(--transition)'
+              }}
+              onClick={handleReset}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+              }}
+            >
+              Reset Form
             </button>
           </form>
         </div>
