@@ -44,7 +44,7 @@ services:
       POSTGRES_USER: schomatch
       POSTGRES_PASSWORD: ${DB_PASSWORD:-schomatch_secret}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U schomatch"]
+      test: [ "CMD-SHELL", "pg_isready -U schomatch" ]
       interval: 5s
       timeout: 5s
       retries: 5
